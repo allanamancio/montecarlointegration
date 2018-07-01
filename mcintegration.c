@@ -1,10 +1,16 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
+#include <mpi.h>
 
 long long N; int k, M; //Arguments for integration
 
+double f(int M_arg, int k_arg, double x_arg) {
+	return (sin((2*M_arg + 1)*M_PI*x)*cos(2*M_PI*k_arg*x))/sin(M_PI*x);
+}
+
 void *integration(void *argument) {
-	
+
 }
 
 int main(int argc, char **argv) {
