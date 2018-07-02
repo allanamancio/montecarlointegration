@@ -42,8 +42,6 @@ double f(int M_arg, int k_arg, double x_arg) {
 void *thread_integration(void *num_cpus_arg) {
 	int cpus = *((int *) num_cpus_arg);
 
-	printf("CPUS %d\n", cpus);
-
 	double x;
 	_f_ = 0;
 	_f2_ = 0;
@@ -55,28 +53,6 @@ void *thread_integration(void *num_cpus_arg) {
 		_f_ = _f_ + y;
 		_f2_ = _f2_ + y*y;
 	}
-
-	return NULL;
-}
-
-void *sequential_integration(void *argument) {
-	double x;
-	_f_ = 0;
-	_f2_ = 0;
-
-	srand(time(NULL));
-	for (int i = 0; i < N; i++) {
-		x = x_random(); //Random number in (0, 0.5]
-		double y = f(M, k, x);
-		_f_ = _f_ + y;
-		_f2_ = _f2_ + y*y;
-	}
-
-	_f_ = _f_/N;
-	_f2_ = _f2_/N;
-
-	result_1 = (_f_ + sqrt((_f2_ - _f_*_f_)/N));
-	result_2 = (_f_ - sqrt((_f2_ - _f_*_f_)/N));
 
 	return NULL;
 }
@@ -115,24 +91,24 @@ int main(int argc, char **argv) {
 
 	/*3. T CPU THREADS*/
 	int num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
+	pthread_t *id; if (num_cpus > 1) id = emalloc((num_cpus - 1)*sizeof(pthread_t));
 
-	start = clock();
-	//Work
-	pthread_t *id = emalloc(num_cpus*sizeof(pthread_t));
-	for (int i = 0; i < num_cpus; i++) {
+	start = clock(); //Start of work
+	for (int i = 0; i < num_cpus - 1; i++) { //T-1 threads
 		if (pthread_create(&id[i], NULL, thread_integration, (void *) &num_cpus)) {
 			fprintf(stderr, "ERROR: Thread not created.\n");
 			exit(1);
 		}
 	}
 
-	for (int i = 0; i < num_cpus; i++) {
+	thread_integration((void *) &num_cpus); //Main thread
+
+	for (int i = 0; i < num_cpus - 1; i++) {
 		if (pthread_join(id[i], NULL)) {
 			fprintf(stderr, "ERROR: Thread not joined.\n");
 			exit(1);
 		}
 	}
-	free(id);
 
 	//Integration value
 	_f_ = _f_/N;
@@ -140,7 +116,7 @@ int main(int argc, char **argv) {
 
 	result_1 = (_f_ + sqrt((_f2_ - _f_*_f_)/N));
 	result_2 = (_f_ - sqrt((_f2_ - _f_*_f_)/N));
-	end = clock();
+	end = clock(); //End of work
 
 	//Print
 	time = ((double) (end - start))/CLOCKS_PER_SEC;
@@ -149,9 +125,17 @@ int main(int argc, char **argv) {
 	printf("Erro no calculo com a subtracao: %lf\n\n", fabs(result_2 - result));
 
 	/*4. ONE CPU THREAD*/
-	start = clock();
-	sequential_integration(NULL); //Work
-	end = clock();
+	num_cpus = 1;
+	
+	start = clock(); //Start of work
+	thread_integration((void *) &num_cpus);
+
+	_f_ = _f_/N;
+	_f2_ = _f2_/N;
+
+	result_1 = (_f_ + sqrt((_f2_ - _f_*_f_)/N));
+	result_2 = (_f_ - sqrt((_f2_ - _f_*_f_)/N));
+	end = clock(); //End of work
 
 	//Print
 	time = ((double) (end - start))/CLOCKS_PER_SEC;
@@ -162,5 +146,6 @@ int main(int argc, char **argv) {
 	// -----------------------------------------------------------------------------------------------------------------
 
 	//Finishing
+	if (num_cpus > 1) free(id);
 	MPI_Finalize();
 }
