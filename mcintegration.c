@@ -32,7 +32,12 @@ double x_random() {
 }
 
 double f(int M_arg, int k_arg, double x_arg) {
-	//Calculate the math function: sin([2M + 1]*pi*x)*cos(2*pi*k*x)/sin(pi*x)
+	//Calculate the math function: 
+	
+	// sin([2M + 1]*pi*x) * cos(2*pi*k*x)
+	// ----------------------------------
+	//            sin(pi*x)
+	
 	return (sin((2*M_arg + 1)*M_PI*x_arg)*cos(2*M_PI*k_arg*x_arg))/sin(M_PI*x_arg);
 }
 
