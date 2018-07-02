@@ -4,6 +4,7 @@
 #include <math.h>
 #include <time.h>
 #include <pthread.h>
+#include <unistd.h>
 
 //Constant
 #ifndef M_PI
@@ -26,8 +27,8 @@ void *emalloc(size_t size) {
 }
 
 double x_random() {
-	//Generate a random number in the interval (0, 1.5]
-	return ( ((double) (rand() + 1)) / ( ((long long) RAND_MAX) + 1) ) * 1.5;
+	//Generate a random number in the interval (0, 0.5]
+	return ( ((double) (rand() + 1)) / ( ((long long) RAND_MAX) + 1) ) * 0.5;
 }
 
 double f(int M_arg, int k_arg, double x_arg) {
@@ -44,7 +45,7 @@ void *thread_integration(void *num_cpus_arg) {
 
 	srand(time(NULL));
 	for (int i = 0; i < N/cpus; i++) {
-		x = x_random(); //Random number in (0, 1.5]
+		x = x_random(); //Random number in (0, 0.5]
 		double y = f(M, k, x);
 		_f_ = _f_ + y;
 		_f2_ = _f2_ + y*y;
@@ -60,7 +61,7 @@ void *sequential_integration(void *argument) {
 
 	srand(time(NULL));
 	for (int i = 0; i < N; i++) {
-		x = x_random(); //Random number in (0, 1.5]
+		x = x_random(); //Random number in (0, 0.5]
 		double y = f(M, k, x);
 		_f_ = _f_ + y;
 		_f2_ = _f2_ + y*y;
@@ -69,8 +70,8 @@ void *sequential_integration(void *argument) {
 	_f_ = _f_/N;
 	_f2_ = _f2_/N;
 
-	result_1 = 1.5 * (_f_ + sqrt((_f2_ - _f_*_f_)/N));
-	result_2 = 1.5 * (_f_ - sqrt((_f2_ - _f_*_f_)/N));
+	result_1 = (_f_ + sqrt((_f2_ - _f_*_f_)/N));
+	result_2 = (_f_ - sqrt((_f2_ - _f_*_f_)/N));
 
 	return NULL;
 }
@@ -86,7 +87,7 @@ int main(int argc, char **argv) {
 	//Integration result algebrically
 	int result;
 	if (abs(k) <= abs(M) && M >= 0) result = 1;
-	if (abs(k) <= abs(M) && M >= 0) result = 1;
+	if (abs(k) <= abs(M) && M < 0) result = -1;
 	else result = 0;
 
 	//Setting time measurement
@@ -98,50 +99,42 @@ int main(int argc, char **argv) {
 	//Monte Carlos Integration with Distributed Computing Techniques
 	MPI_Status status;
 
-	int num_cpus, this_cpu;
+	int num_processes, this_process;
 	MPI_Init(&argc, &argv);
-	MPI_Comm_size(MPI_COMM_WORLD, &num_cpus);
-	MPI_Comm_rank(MPI_COMM_WORLD, &this_cpu);
+	MPI_Comm_size(MPI_COMM_WORLD, &num_processes);
+	MPI_Comm_rank(MPI_COMM_WORLD, &this_process);
 
 	/*1. LOAD BALANCER WITH THE MINIMUM TIME*/
 
 	/*2. ONE GPU AND ONE CPU THREAD*/
 
 	/*3. T CPU THREADS*/
-	int i_cpu = 0;
-	result_1 = INFINITY; result_2 = INFINITY; //Fake number to checking if the value was calculated or not
+	int num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 
 	start = clock();
 	//Work
-	if (this_cpu == 0) {
-		while (i_cpu != num_cpus) {
-			_f_ = _f_/N;
-			_f2_ = _f2_/N;
-
-			result_1 = 1.5 * (_f_ + sqrt((_f2_ - _f_*_f_)/N));
-			result_2 = 1.5 * (_f_ - sqrt((_f2_ - _f_*_f_)/N));
+	pthread_t *id = emalloc(num_cpus*sizeof(pthread_t));
+	for (int i = 0; i < num_cpus; i++) {
+		if (pthread_create(&id[i], NULL, thread_integration, (void *) &num_cpus)) {
+			fprintf(stderr, "ERROR: Thread not created.\n");
+			exit(1);
 		}
 	}
-	else {
-		pthread_t *id = emalloc(num_cpus*sizeof(pthread_t));
 
-		for (int i = 0; i < num_cpus; i++) {
-			if (pthread_create(&id[i], NULL, thread_integration, (void *) &num_cpus)) {
-				fprintf(stderr, "ERROR: Thread not created.\n");
-				exit(1);
-			}
+	for (int i = 0; i < num_cpus; i++) {
+		if (pthread_join(id[i], NULL)) {
+			fprintf(stderr, "ERROR: Thread not joined.\n");
+			exit(1);
 		}
-
-		for (; i_cpu < num_cpus; i_cpu++) {
-			if (pthread_join(id[i_cpu], NULL)) {
-				fprintf(stderr, "ERROR: Thread not joined.\n");
-				exit(1);
-			}
-		}
-		free(id);
 	}
+	free(id);
 
-	while (result_1 == INFINITY || result_2 == INFINITY) continue;
+	//Integration value
+	_f_ = _f_/N;
+	_f2_ = _f2_/N;
+
+	result_1 = (_f_ + sqrt((_f2_ - _f_*_f_)/N));
+	result_2 = (_f_ - sqrt((_f2_ - _f_*_f_)/N));
 	end = clock();
 
 	//Print
