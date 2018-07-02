@@ -1,11 +1,17 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <pthread.h>
+#include <mpi.h>
 #include <math.h>
 #include <time.h>
-#include <mpi.h>
+#include <pthread.h>
+
+//Constant
+#ifndef M_PI
+	#define M_PI 3.14159265358979323846
+#endif
 
 long long N; int k, M; //Arguments for integration
+double _f_, _f2_; //Intermediary value of integration
 double result_1, result_2; //Value of integration
 
 void *emalloc(size_t size) {
@@ -29,17 +35,35 @@ double f(int M_arg, int k_arg, double x_arg) {
 	return (sin((2*M_arg + 1)*M_PI*x_arg)*cos(2*M_PI*k_arg*x_arg))/sin(M_PI*x_arg);
 }
 
-void *integration(void *argument) {
+void *thread_integration(void *num_cpus_arg) {
+	int cpus = *((int *) num_cpus_arg);
+
 	double x;
-	double _f_;
-	double _f2_;
+	_f_ = 0;
+	_f2_ = 0;
+
+	srand(time(NULL));
+	for (int i = 0; i < N/cpus; i++) {
+		x = x_random(); //Random number in (0, 1.5]
+		double y = f(M, k, x);
+		_f_ = _f_ + y;
+		_f2_ = _f2_ + y*y;
+	}
+
+	return NULL;
+}
+
+void *sequential_integration(void *argument) {
+	double x;
+	_f_ = 0;
+	_f2_ = 0;
 
 	srand(time(NULL));
 	for (int i = 0; i < N; i++) {
 		x = x_random(); //Random number in (0, 1.5]
 		double y = f(M, k, x);
-		_f_ = y;
-		_f2_ = y*y;
+		_f_ = _f_ + y;
+		_f2_ = _f2_ + y*y;
 	}
 
 	_f_ = _f_/N;
@@ -65,6 +89,12 @@ int main(int argc, char **argv) {
 	if (abs(k) <= abs(M) && M >= 0) result = 1;
 	else result = 0;
 
+	//Setting time measurement
+	clock_t start, end;
+	double time;
+
+	// -----------------------------------------------------------------------------------------------------------------
+
 	//Monte Carlos Integration with Distributed Computing Techniques
 	MPI_Status status;
 
@@ -73,45 +103,56 @@ int main(int argc, char **argv) {
 	MPI_Comm_size(MPI_COMM_WORLD, &num_cpus);
 	MPI_Comm_rank(MPI_COMM_WORLD, &this_cpu);
 
-	//1. Load Balancer with the Minimum Time
+	/*1. LOAD BALANCER WITH THE MINIMUM TIME*/
+
+	/*2. ONE GPU AND ONE CPU THREAD*/
+
+	/*3. T CPU THREADS*/
+	int i_cpu = 0;
+	result_1 = INFINITY; result_2 = INFINITY; //Fake number to checking if the value was calculated or not
+
+	start = clock();
+	//Work
 	if (this_cpu == 0) {
+		while (i_cpu != num_cpus) {
+			_f_ = _f_/N;
+			_f2_ = _f2_/N;
 
-	}
-	else {
-
-	}
-
-	MPI_Finalize();
-
-	//2. One GPU and one CPU thread
-
-	//3. T CPU threads
-	if (this_cpu == 0) {
-		
+			result_1 = 1.5 * (_f_ + sqrt((_f2_ - _f_*_f_)/N));
+			result_2 = 1.5 * (_f_ - sqrt((_f2_ - _f_*_f_)/N));
+		}
 	}
 	else {
 		pthread_t *id = emalloc(num_cpus*sizeof(pthread_t));
+
 		for (int i = 0; i < num_cpus; i++) {
-			if (pthread_create(&id[i], NULL, integration, NULL)) {
+			if (pthread_create(&id[i], NULL, thread_integration, (void *) &num_cpus)) {
 				fprintf(stderr, "ERROR: Thread not created.\n");
 				exit(1);
 			}
 		}
 
-		for (int i = 0; i < num_cpus; i++) {
-			if (pthread_join(id[i], NULL)) {
+		for (; i_cpu < num_cpus; i_cpu++) {
+			if (pthread_join(id[i_cpu], NULL)) {
 				fprintf(stderr, "ERROR: Thread not joined.\n");
 				exit(1);
 			}
 		}
+		free(id);
 	}
 
-	//4. One CPU thread
-	clock_t start, end;
-	double time;
+	while (result_1 == INFINITY || result_2 == INFINITY) continue;
+	end = clock();
 
+	//Print
+	time = ((double) (end - start))/CLOCKS_PER_SEC;
+	printf("Tempo na CPU com %d threads em segundos: %lf\n", num_cpus, time);
+	printf("Erro no calculo com a soma: %lf\n", fabs(result_1 - result));
+	printf("Erro no calculo com a subtracao: %lf\n\n", fabs(result_2 - result));
+
+	/*4. ONE CPU THREAD*/
 	start = clock();
-	integration(NULL); //Work
+	sequential_integration(NULL); //Work
 	end = clock();
 
 	//Print
@@ -119,4 +160,9 @@ int main(int argc, char **argv) {
 	printf("Tempo sequencial em segundos: %lf\n", time);
 	printf("Erro no calculo com a soma: %lf\n", fabs(result_1 - result));
 	printf("Erro no calculo com a subtracao: %lf\n", fabs(result_2 - result));
+
+	// -----------------------------------------------------------------------------------------------------------------
+
+	//Finishing
+	MPI_Finalize();
 }
