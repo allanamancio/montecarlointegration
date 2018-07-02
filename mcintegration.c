@@ -8,6 +8,17 @@
 long long N; int k, M; //Arguments for integration
 double result_1, result_2; //Value of integration
 
+void *emalloc(size_t size) {
+	void *memory = malloc(size);
+
+	if (!memory) {
+		fprintf(stderr, "ERROR: Failed to malloc.\n");
+		exit(1);
+	}
+
+	return memory;
+}
+
 double x_random() {
 	//Generate a random number in the interval (0, 1.5]
 	return ( ((double) (rand() + 1)) / ( ((long long) RAND_MAX) + 1) ) * 1.5;
@@ -75,7 +86,25 @@ int main(int argc, char **argv) {
 	//2. One GPU and one CPU thread
 
 	//3. T CPU threads
-	pthread_t 	
+	if (this_cpu == 0) {
+		
+	}
+	else {
+		pthread_t *id = emalloc(num_cpus*sizeof(pthread_t));
+		for (int i = 0; i < num_cpus; i++) {
+			if (pthread_create(&id[i], NULL, integration, NULL)) {
+				fprintf(stderr, "ERROR: Thread not created.\n");
+				exit(1);
+			}
+		}
+
+		for (int i = 0; i < num_cpus; i++) {
+			if (pthread_join(id[i], NULL)) {
+				fprintf(stderr, "ERROR: Thread not joined.\n");
+				exit(1);
+			}
+		}
+	}
 
 	//4. One CPU thread
 	clock_t start, end;
