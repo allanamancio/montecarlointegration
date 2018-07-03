@@ -42,14 +42,13 @@ double f(int M_arg, int k_arg, double x_arg) {
 void *thread_integration(void *num_cpus_arg) {
 	int cpus = *((int *) num_cpus_arg);
 
-	double x;
+	double x, y;
 	_f_ = 0;
 	_f2_ = 0;
 
-	srand(time(NULL));
 	for (int i = 0; i < N/cpus; i++) {
 		x = x_random(); //Random number in (0, 0.5]
-		double y = f(M, k, x);
+		y = f(M, k, x);
 		_f_ = _f_ + y;
 		_f2_ = _f2_ + y*y;
 	}
@@ -73,7 +72,9 @@ int main(int argc, char **argv) {
 
 	//Setting time measurement
 	clock_t start, end;
-	double time;
+	double execution_time;
+
+	srand(time(NULL)); //Seed of random
 
 	// -----------------------------------------------------------------------------------------------------------------
 
@@ -101,9 +102,20 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	thread_integration((void *) &num_cpus); //Main thread
+	//Main thread v
+	double x, y;
+	_f_ = 0;
+	_f2_ = 0;
 
-	for (int i = 0; i < num_cpus - 1; i++) {
+	for (int i = 0; i < N/num_cpus + (N - N/num_cpus*num_cpus); i++) {
+		x = x_random(); //Random number in (0, 0.5]
+		y = f(M, k, x);	
+		_f_ = _f_ + y;
+		_f2_ = _f2_ + y*y;
+	}
+	//Main thread ^
+
+	for (int i = 0; i < num_cpus - 1; i++) { //Waiting for the other threads
 		if (pthread_join(id[i], NULL)) {
 			fprintf(stderr, "ERROR: Thread not joined.\n");
 			exit(1);
@@ -119,8 +131,8 @@ int main(int argc, char **argv) {
 	end = clock(); //End of work
 
 	//Print
-	time = ((double) (end - start))/CLOCKS_PER_SEC;
-	printf("Tempo na CPU com %d threads em segundos: %lf\n", num_cpus, time);
+	execution_time = ((double) (end - start))/CLOCKS_PER_SEC;
+	printf("Tempo na CPU com %d threads em segundos: %lf\n", num_cpus, execution_time);
 	printf("Erro no calculo com a soma: %lf\n", fabs(result_1 - result));
 	printf("Erro no calculo com a subtracao: %lf\n\n", fabs(result_2 - result));
 
@@ -138,8 +150,8 @@ int main(int argc, char **argv) {
 	end = clock(); //End of work
 
 	//Print
-	time = ((double) (end - start))/CLOCKS_PER_SEC;
-	printf("Tempo sequencial em segundos: %lf\n", time);
+	execution_time = ((double) (end - start))/CLOCKS_PER_SEC;
+	printf("Tempo sequencial em segundos: %lf\n", execution_time);
 	printf("Erro no calculo com a soma: %lf\n", fabs(result_1 - result));
 	printf("Erro no calculo com a subtracao: %lf\n", fabs(result_2 - result));
 
