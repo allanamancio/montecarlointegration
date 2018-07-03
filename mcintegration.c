@@ -95,30 +95,36 @@ int main(int argc, char **argv) {
 	pthread_t *id; if (num_cpus > 1) id = emalloc((num_cpus - 1)*sizeof(pthread_t));
 
 	start = clock(); //Start of work
-	for (int i = 0; i < num_cpus - 1; i++) { //T-1 threads
-		if (pthread_create(&id[i], NULL, thread_integration, (void *) &num_cpus)) {
-			fprintf(stderr, "ERROR: Thread not created.\n");
-			exit(1);
+	if (N < num_cpus) {
+		num_cpus = 1;
+		thread_integration((void *) &num_cpus);
+	}
+	else {
+		for (int i = 0; i < num_cpus - 1; i++) { //T-1 threads
+			if (pthread_create(&id[i], NULL, thread_integration, (void *) &num_cpus)) {
+				fprintf(stderr, "ERROR: Thread not created.\n");
+				exit(1);
+			}
 		}
-	}
 
-	//Main thread v
-	double x, y;
-	_f_ = 0;
-	_f2_ = 0;
+		//Main thread v
+		double x, y;
+		_f_ = 0;
+		_f2_ = 0;
 
-	for (int i = 0; i < N/num_cpus + (N - N/num_cpus*num_cpus); i++) {
-		x = x_random(); //Random number in (0, 0.5]
-		y = f(M, k, x);	
-		_f_ = _f_ + y;
-		_f2_ = _f2_ + y*y;
-	}
-	//Main thread ^
+		for (int i = 0; i < N/num_cpus + (N - N/num_cpus*num_cpus); i++) {
+			x = x_random(); //Random number in (0, 0.5]
+			y = f(M, k, x);	
+			_f_ = _f_ + y;
+			_f2_ = _f2_ + y*y;
+		}
+		//Main thread ^
 
-	for (int i = 0; i < num_cpus - 1; i++) { //Waiting for the other threads
-		if (pthread_join(id[i], NULL)) {
-			fprintf(stderr, "ERROR: Thread not joined.\n");
-			exit(1);
+		for (int i = 0; i < num_cpus - 1; i++) { //Waiting for the other threads
+			if (pthread_join(id[i], NULL)) {
+				fprintf(stderr, "ERROR: Thread not joined.\n");
+				exit(1);
+			}
 		}
 	}
 
