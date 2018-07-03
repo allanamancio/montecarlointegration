@@ -95,7 +95,7 @@ int main(int argc, char **argv) {
 	pthread_t *id; if (num_cpus > 1) id = emalloc((num_cpus - 1)*sizeof(pthread_t));
 
 	start = clock(); //Start of work
-	if (N < num_cpus) {
+	if (N < num_cpus) { //It's not worth to use T > 1 threads
 		num_cpus = 1;
 		thread_integration((void *) &num_cpus);
 	}
