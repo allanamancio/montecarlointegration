@@ -50,7 +50,7 @@ __global__ void cuda_integration(double *_fcuda_, double *_f2cuda_, int _M, int 
 	*_f2cuda_ = 0;
 
 	for (int i = 0; i < _N; i++) {
-		x = ( ((double) (curand(&state) + 1)) / ( ((long long) RAND_MAX) + 1) ) * 0.5;
+		x = ( ((double) (curand(&state) + 1)) / ( ((long long) UINT_MAX) + 1) ) * 0.5;
 		y = (sin((2 * _M + 1) * PI * x) * cos(2 * PI * _k * x)) / sin(PI * x);
 		*_fcuda_ += y;
 		*_f2cuda_ += y * y;
