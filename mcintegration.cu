@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <mpi.h>
+// #include <mpi.h> //*MPI
 #include <math.h>
 #include <time.h>
 #include <pthread.h>
@@ -41,6 +41,22 @@ double f(int M_arg, int k_arg, double x_arg) {
 	return (sin((2*M_arg + 1)*PI*x_arg)*cos(2*PI*k_arg*x_arg))/sin(PI*x_arg);
 }
 
+__global__ void cuda_integration(double *_fcuda_, double *_f2cuda_, int _M, int _k, long long _N, unsigned long seed) {
+	curandState state;
+	curand_init(seed, 0, 0, &state);
+
+	double x, y;
+	*_fcuda_ = 0;
+	*_f2cuda_ = 0;
+
+	for (int i = 0; i < _N; i++) {
+		x = ( ((double) (curand(&state) + 1)) / ( ((long long) RAND_MAX) + 1) ) * 0.5;
+		y = (sin((2 * _M + 1) * PI * x) * cos(2 * PI * _k * x)) / sin(PI * x);
+		*_fcuda_ += y;
+		*_f2cuda_ += y * y;
+	}
+}
+
 void *thread_integration(void *num_cpus_arg) {
 	int cpus = *((int *) num_cpus_arg);
 
@@ -59,21 +75,6 @@ void *thread_integration(void *num_cpus_arg) {
 	return NULL;
 }
 
-__global__ void integration(long* f1, long* f2, int _M, int _k, int _N, unsigned long seed) {
-	*f1 = 0;
-	*f2 = 0;
-
-	curandState state;
-    curand_init(seed, 0, 0, &state);
-
-	for (int i = 0; i < _N; i++) {
-		double x = ( ((double) (curand(&state) + 1)) / ( ((long long) RAND_MAX) + 1) ) * 0.5;
-		double y = (sin((2 * _M + 1) * PI * x) * cos(2 * PI * _k * x)) / sin(PI * x);
-		*f1 += y;
-		*f2 += y * y;
-	}
-}
-
 int main(int argc, char **argv) {
 	//Checking quantity of arguments
 	if (argc != 4) {
@@ -83,9 +84,9 @@ int main(int argc, char **argv) {
 	N = atoll(argv[1]); k = atoi(argv[2]); M = atoi(argv[3]); //Arguments
 
 	//Integration result algebrically
-	int result;
+	double result;
 	if (abs(k) <= abs(M) && M >= 0) result = 1;
-	if (abs(k) <= abs(M) && M < 0) result = -1;
+	else if (abs(k) <= abs(M) && M < 0) result = -1;
 	else result = 0;
 
 	//Setting time measurement
@@ -97,16 +98,56 @@ int main(int argc, char **argv) {
 	// -----------------------------------------------------------------------------------------------------------------
 
 	//Monte Carlos Integration with Distributed Computing Techniques
-	// MPI_Status status;
+	// MPI_Status status; //*MPI
 
-	int num_processes, this_process;
-	MPI_Init(&argc, &argv);
-	MPI_Comm_size(MPI_COMM_WORLD, &num_processes);
-	MPI_Comm_rank(MPI_COMM_WORLD, &this_process);
+	// int num_processes, this_process; //*MPI
+	// MPI_Init(&argc, &argv); //*MPI
+	// MPI_Comm_size(MPI_COMM_WORLD, &num_processes); //*MPI
+	// MPI_Comm_rank(MPI_COMM_WORLD, &this_process); //*MPI
 
 	/*1. LOAD BALANCER WITH THE MINIMUM TIME*/
 
+
+
+
 	/*2. ONE GPU AND ONE CPU THREAD*/
+	cudaSetDevice(0);
+	cudaDeviceReset();
+
+	double *_fcuda_ = NULL;
+	double *_f2cuda_ = NULL;
+
+	//Alloc _f_ (_fcuda_) and _f2_ (_f2cuda_) on device
+	cudaMalloc((void **) &_fcuda_, sizeof(double));
+	cudaMalloc((void **) &_f2cuda_, sizeof(double));
+
+	start = clock(); //Start of work
+	//Copy _f_ and _f2_ from host to device
+	cudaMemcpy(_fcuda_, &_f_, sizeof(double), cudaMemcpyHostToDevice);
+	cudaMemcpy(_f2cuda_, &_f2_, sizeof(double), cudaMemcpyHostToDevice);
+
+	cuda_integration<<<1, 1>>>(_fcuda_, _f2cuda_, M, k, N, time(NULL));
+	
+	//Rescue _f_ and _f2_ from device to host
+	cudaMemcpy(&_f_, _fcuda_, sizeof(double), cudaMemcpyDeviceToHost);
+	cudaMemcpy(&_f2_, _f2cuda_, sizeof(double), cudaMemcpyDeviceToHost);
+
+	//Integration value
+	_f_ = _f_/N;
+	_f2_ = _f2_/N;
+
+	result_1 = (_f_ + sqrt((_f2_ - _f_*_f_)/N));
+	result_2 = (_f_ - sqrt((_f2_ - _f_*_f_)/N));
+	end = clock(); //End of work
+
+	//Print time and error
+	execution_time = ((double) (end - start))/CLOCKS_PER_SEC;
+	printf("result %lf, result1 %lf, result2 %lf\n", result, result_1, result_2); //DEBUG
+	printf("Tempo na GPU com uma thread na CPU em segundos: %lf\n", execution_time);
+	printf("Erro no calculo com a soma: %lf\n", fabs(result_1 - result));
+	printf("Erro no calculo com a subtracao: %lf\n\n", fabs(result_2 - result));
+
+
 
 	/*3. T CPU THREADS*/
 	int num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
@@ -154,11 +195,14 @@ int main(int argc, char **argv) {
 	result_2 = (_f_ - sqrt((_f2_ - _f_*_f_)/N));
 	end = clock(); //End of work
 
-	//Print
+	//Print time and error
 	execution_time = ((double) (end - start))/CLOCKS_PER_SEC;
+	printf("result %lf, result1 %lf, result2 %lf\n", result, result_1, result_2); //DEBUG
 	printf("Tempo na CPU com %d threads em segundos: %lf\n", num_cpus, execution_time);
 	printf("Erro no calculo com a soma: %lf\n", fabs(result_1 - result));
 	printf("Erro no calculo com a subtracao: %lf\n\n", fabs(result_2 - result));
+
+
 
 	/*4. ONE CPU THREAD*/
 	num_cpus = 1;
@@ -166,6 +210,7 @@ int main(int argc, char **argv) {
 	start = clock(); //Start of work
 	thread_integration((void *) &num_cpus);
 
+	//Integration value
 	_f_ = _f_/N;
 	_f2_ = _f2_/N;
 
@@ -173,8 +218,9 @@ int main(int argc, char **argv) {
 	result_2 = (_f_ - sqrt((_f2_ - _f_*_f_)/N));
 	end = clock(); //End of work
 
-	//Print
+	//Print time and error
 	execution_time = ((double) (end - start))/CLOCKS_PER_SEC;
+	printf("result %lf, result1 %lf, result2 %lf\n", result, result_1, result_2); //DEBUG
 	printf("Tempo sequencial em segundos: %lf\n", execution_time);
 	printf("Erro no calculo com a soma: %lf\n", fabs(result_1 - result));
 	printf("Erro no calculo com a subtracao: %lf\n", fabs(result_2 - result));
@@ -183,5 +229,5 @@ int main(int argc, char **argv) {
 
 	//Finishing
 	if (num_cpus > 1) free(id);
-	MPI_Finalize();
+	// MPI_Finalize(); //*MPI
 }
