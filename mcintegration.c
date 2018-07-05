@@ -1,12 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
-// #include <mpi.h> //*MPI
+//#include <mpi.h> //*MPI
 #include <math.h>
 #include <time.h>
 #include <pthread.h>
 #include <unistd.h>
-// #include <cuda_profiler_api.h>
-// #include <curand_kernel.h>
+//#include <cuda_profiler_api.h>
+//#include <curand_kernel.h>
 
 //Constant
 #define PI 3.14159265358979323846 //Pi
