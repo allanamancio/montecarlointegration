@@ -5,15 +5,18 @@
 #include <time.h>
 #include <pthread.h>
 #include <unistd.h>
-#include <cuda_profiler_api.h>
-#include <curand_kernel.h>
+// #include <cuda_profiler_api.h>
+// #include <curand_kernel.h>
 
 //Constant
 #define PI 3.14159265358979323846 //Pi
 
+//Global variables
 long long N; int k, M; //Arguments for integration
 double _f_, _f2_; //Intermediary value of integration
-double result_1, result_2; //Value of integration
+
+//Semaphore
+pthread_mutex_t sum_fs_;
 
 void *emalloc(size_t size) {
 	void *memory = malloc(size);
@@ -41,7 +44,7 @@ double f(int M_arg, int k_arg, double x_arg) {
 	return (sin((2*M_arg + 1)*PI*x_arg)*cos(2*PI*k_arg*x_arg))/sin(PI*x_arg);
 }
 
-__global__ void cuda_integration(double *_fcuda_, double *_f2cuda_, int _M, int _k, long long _N, unsigned long seed) {
+/*__global__ void cuda_integration(double *_fcuda_, double *_f2cuda_, int _M, int _k, long long _N, unsigned long seed) {
 	curandState state;
 	curand_init(seed, 0, 0, &state);
 
@@ -55,22 +58,26 @@ __global__ void cuda_integration(double *_fcuda_, double *_f2cuda_, int _M, int 
 		*_fcuda_ += y;
 		*_f2cuda_ += y * y;
 	}
-}
+}*/
 
 void *thread_integration(void *num_cpus_arg) {
 	int cpus = *((int *) num_cpus_arg);
 
 	double x, y;
-	_f_ = 0;
-	_f2_ = 0;
-
+	double _fpart_ = 0; //Partial _f_
+	double _f2part_ = 0; //Partial _f2_
 
 	for (int i = 0; i < N/cpus; i++) {
 		x = x_random(); //Random number in (0, 0.5]
 		y = f(M, k, x);
-		_f_ = _f_ + y;
-		_f2_ = _f2_ + y*y;
+		_fpart_ += y;
+		_f2part_ += y*y;
 	}
+
+	pthread_mutex_lock(&sum_fs_); //Lock
+	_f_ += _fpart_;
+	_f2_ += _f2part_;
+	pthread_mutex_unlock(&sum_fs_); //Unlock
 
 	return NULL;
 }
@@ -83,6 +90,9 @@ int main(int argc, char **argv) {
 	}
 	N = atoll(argv[1]); k = atoi(argv[2]); M = atoi(argv[3]); //Arguments
 
+	//Variables
+	double result_1, result_2; //Value of integration
+
 	//Integration result algebrically
 	double result;
 	if (abs(k) <= abs(M) && M >= 0) result = 1;
@@ -92,6 +102,12 @@ int main(int argc, char **argv) {
 	//Setting time measurement
 	clock_t start, end;
 	double execution_time;
+
+	//Semaphore
+	if (pthread_mutex_init(&sum_fs_, NULL)) {
+        fprintf(stderr, "ERROR: Mutex not initialized\n");
+        exit(1);
+	}
 
 	srand(time(NULL)); //Seed of random
 
@@ -111,8 +127,11 @@ int main(int argc, char **argv) {
 
 
 	/*2. ONE GPU AND ONE CPU THREAD*/
-	cudaSetDevice(0);
+	/*cudaSetDevice(0);
 	cudaDeviceReset();
+
+	_f_ += 0; //Initialization
+	_f2_ += 0; //Initialization
 
 	double *_fcuda_ = NULL;
 	double *_f2cuda_ = NULL;
@@ -145,13 +164,16 @@ int main(int argc, char **argv) {
 	printf("result %lf, result1 %lf, result2 %lf\n", result, result_1, result_2); //DEBUG
 	printf("Tempo na GPU com uma thread na CPU em segundos: %lf\n", execution_time);
 	printf("Erro no calculo com a soma: %lf\n", fabs(result_1 - result));
-	printf("Erro no calculo com a subtracao: %lf\n\n", fabs(result_2 - result));
+	printf("Erro no calculo com a subtracao: %lf\n\n", fabs(result_2 - result));*/
 
 
 
 	/*3. T CPU THREADS*/
 	int num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 	pthread_t *id; if (num_cpus > 1) id = (pthread_t *) emalloc((num_cpus - 1)*sizeof(pthread_t));
+
+	_f_ += 0; //Initialization
+	_f2_ += 0; //Initialization
 
 	start = clock(); //Start of work
 	if (N < num_cpus) { //It's not worth to use T > 1 threads
@@ -168,16 +190,22 @@ int main(int argc, char **argv) {
 
 		//Main thread v
 		double x, y;
-		_f_ = 0;
-		_f2_ = 0;
+		double _fpart_ = 0; //Partial _f_
+		double _f2part_ = 0; //Partial _f_
 
 		for (int i = 0; i < N/num_cpus + (N - N/num_cpus*num_cpus); i++) {
 			x = x_random(); //Random number in (0, 0.5]
 			y = f(M, k, x);	
-			_f_ = _f_ + y;
-			_f2_ = _f2_ + y*y;
+			_fpart_ += y;
+			_f2part_ + y*y;
 		}
+
+		pthread_mutex_lock(&sum_fs_); //Lock
+		_f_ += _fpart_;
+		_f2_ += _f2part_;
+		pthread_mutex_unlock(&sum_fs_); //Unlock
 		//Main thread ^
+
 
 		for (int i = 0; i < num_cpus - 1; i++) { //Waiting for the other threads
 			if (pthread_join(id[i], NULL)) {
@@ -207,6 +235,9 @@ int main(int argc, char **argv) {
 	/*4. ONE CPU THREAD*/
 	num_cpus = 1;
 	
+	_f_ += 0; //Initialization
+	_f2_ += 0; //Initialization
+
 	start = clock(); //Start of work
 	thread_integration((void *) &num_cpus);
 
@@ -229,5 +260,6 @@ int main(int argc, char **argv) {
 
 	//Finishing
 	if (num_cpus > 1) free(id);
+	pthread_mutex_destroy(&sum_fs_);
 	// MPI_Finalize(); //*MPI
 }
