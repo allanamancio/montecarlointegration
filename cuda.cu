@@ -9,8 +9,6 @@
 #include <curand_kernel.h>
 #include <sys/time.h>
 
-#define dbg printf("%d\n", __LINE__)
-
 //Constant
 #define PI 3.14159265358979323846 //Pi
 
@@ -171,7 +169,6 @@ extern "C" int mycal(long long NN, int kk, int MM) {
 
 	end = clock();
 	execution_time = ((double) (end - start))/CLOCKS_PER_SEC;
-	printf("result %lf, result1 %lf, result2 %lf\n", result, result_1, result_2); //DEBUG
 	printf("Tempo com balanceamento de carga em segundos: %lf\n", execution_time);
 	printf("Erro no calculo com a soma: %lf\n", fabs(result_1 - result));
 	printf("Erro no calculo com a subtracao: %lf\n\n", fabs(result_2 - result));

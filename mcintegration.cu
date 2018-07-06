@@ -9,8 +9,6 @@
 #include <curand_kernel.h>
 #include <sys/time.h>
 
-#define dbg // printf("%d\n", __LINE__)
-
 //Constant
 #define PI 3.14159265358979323846 //Pi
 
@@ -137,7 +135,7 @@ int main(int argc, char **argv) {
 	//Alloc _f_ (_fcuda_) and _f2_ (_f2cuda_) on device
 	cudaMalloc((void **) &_fcuda_, sizeof(double));
 	cudaMalloc((void **) &_f2cuda_, sizeof(double));
-	dbg;
+	
 	// *_fcuda_ = 0; //Initialization
 	// *_f2cuda_ = 0; //Initialization
 
@@ -145,37 +143,35 @@ int main(int argc, char **argv) {
 	//Copy _f_ and _f2_ from host to device
 	cudaMemcpy(_fcuda_, &_f_, sizeof(double), cudaMemcpyHostToDevice);
 	cudaMemcpy(_f2cuda_, &_f2_, sizeof(double), cudaMemcpyHostToDevice);
-	dbg;
+	
 	cuda_integration<<<1, 1>>>(_fcuda_, _f2cuda_, M, k, N, time(NULL));
 	
 	//Rescue _f_ and _f2_ from device to host
 	cudaMemcpy(&_f_, _fcuda_, sizeof(double), cudaMemcpyDeviceToHost);
 	cudaMemcpy(&_f2_, _f2cuda_, sizeof(double), cudaMemcpyDeviceToHost);
-	dbg;
+	
 	//Integration value
 	_f_ = _f_/N;
 	_f2_ = _f2_/N;
-	dbg;
+	
 	result_1 = (_f_ + sqrt((_f2_ - _f_*_f_)/N));
 	result_2 = (_f_ - sqrt((_f2_ - _f_*_f_)/N));
 	end = clock(); //End of work
-	dbg;
+	
 	//Print time and error
 	execution_time = ((double) (end - start))/CLOCKS_PER_SEC;
-	printf("result %lf, result1 %lf, result2 %lf\n", result, result_1, result_2); //DEBUG
 	printf("Tempo na GPU com uma thread na CPU em segundos: %lf\n", execution_time);
 	printf("Erro no calculo com a soma: %lf\n", fabs(result_1 - result));
 	printf("Erro no calculo com a subtracao: %lf\n\n", fabs(result_2 - result));
 
-	dbg;
-
+	
 	/*3. T CPU THREADS*/
 	struct timeval bb, ee;
 	gettimeofday(&bb, NULL);
 
 	num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 	pthread_t *id; if (num_cpus > 1) id = (pthread_t *) emalloc((num_cpus - 1)*sizeof(pthread_t));
-	dbg;
+	
 	_f_ += 0; //Initialization
 	_f2_ += 0; //Initialization
 
@@ -233,7 +229,6 @@ int main(int argc, char **argv) {
 
 	//Print time and error
 	execution_time = ((double) (end - start))/CLOCKS_PER_SEC;
-	printf("result %lf, result1 %lf, result2 %lf\n", result, result_1, result_2); //DEBUG
 	printf("Tempo na CPU com %d threads em segundos: %lf\n", num_cpus, gpuTime/1000000);
 	printf("Erro no calculo com a soma: %lf\n", fabs(result_1 - result));
 	printf("Erro no calculo com a subtracao: %lf\n\n", fabs(result_2 - result));
@@ -259,7 +254,6 @@ int main(int argc, char **argv) {
 
 	//Print time and error
 	execution_time = ((double) (end - start))/CLOCKS_PER_SEC;
-	printf("result %lf, result1 %lf, result2 %lf\n", result, result_1, result_2); //DEBUG
 	printf("Tempo sequencial em segundos: %lf\n", execution_time);
 	printf("Erro no calculo com a soma: %lf\n", fabs(result_1 - result));
 	printf("Erro no calculo com a subtracao: %lf\n", fabs(result_2 - result));
