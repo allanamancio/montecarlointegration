@@ -9,7 +9,7 @@
 #include <curand_kernel.h>
 #include <sys/time.h>
 
-#define dbg printf("%d\n", __LINE__)
+#define dbg // printf("%d\n", __LINE__)
 
 //Constant
 #define PI 3.14159265358979323846 //Pi
@@ -127,90 +127,8 @@ int main(int argc, char **argv) {
 	srand(time(NULL)); //Seed of random
 	// -----------------------------------------------------------------------------------------------------------------
 	/*Monte Carlos Integration with Distributed Computing Techniques*/
-	
-	//MPI Settings
-	// MPI_Status status; //*MPI
-
-	// int num_processes, this_process; //*MPI
-	dbg;
-	fflush(stdout);
-
-	// MPI_Init(&argc, &argv); //*MPI
-	dbg;
-	fflush(stdout);
-
-	// MPI_Comm_size(MPI_COMM_WORLD, &num_processes); //*MPI
-	// MPI_Comm_rank(MPI_COMM_WORLD, &this_process); //*MPI
-
-	//CUDA Settings
-	cudaSetDevice(0);
-	dbg;
-	cudaDeviceReset();
-	/*1. LOAD BALANCER WITH THE MINIMUM TIME*/
-	start = clock();
-
-	num_cpus = 2;
-	pthread_t cpu_id;
 	double *_fcuda_ = NULL;
 	double *_f2cuda_ = NULL;
-
-	//Alloc _f_ (_fcuda_) and _f2_ (_f2cuda_) on device
-	cudaMalloc((void **) &_fcuda_, sizeof(double));
-	cudaMalloc((void **) &_f2cuda_, sizeof(double));
-
-
-	// *_f_ = 0; //Initialization
-	// *_f2_ = 0; //Initialization
-
-
-	if (pthread_create(&cpu_id, NULL, thread_integration, (void *) &num_cpus)) {
-		fprintf(stderr, "ERROR: Thread not created.\n");
-		exit(1);
-	}
-
-	// if (this_process == 0) {
-		double _fpart_; //Partial _f_
-		double _f2part_; //Partial _f2_
-
-		//Copy _f_ and _f2_ from host to device
-		cudaMemcpy(_fcuda_, &_fpart_, sizeof(double), cudaMemcpyHostToDevice);
-		cudaMemcpy(_f2cuda_, &_f2part_, sizeof(double), cudaMemcpyHostToDevice);
-
-		cuda_integration<<<1, 1>>>(_fcuda_, _f2cuda_, M, k, N/2 + (N - N/2*2), time(NULL));
-		
-		//Rescue _f_ and _f2_ from device to host
-		cudaMemcpy(&_fpart_, _fcuda_, sizeof(double), cudaMemcpyDeviceToHost);
-		cudaMemcpy(&_f2part_, _f2cuda_, sizeof(double), cudaMemcpyDeviceToHost);
-
-		pthread_mutex_lock(&sum_fs_); //Lock
-		_f_ += _fpart_;
-		_f2_ += _f2part_;
-		pthread_mutex_unlock(&sum_fs_); //Unlock
-	dbg;		
-	// }
-
-	if (pthread_join(cpu_id, NULL)) {
-		fprintf(stderr, "ERROR: Thread not joined.\n");
-		exit(1);
-	}
-	dbg;
-	//Integration value
-	_f_ = _f_/N;
-	_f2_ = _f2_/N;
-
-	result_1 = (_f_ + sqrt((_f2_ - _f_*_f_)/N));
-	result_2 = (_f_ - sqrt((_f2_ - _f_*_f_)/N));
-
-	// MPI_Finalize(); //*MPI
-
-	end = clock();
-	dbg;
-	execution_time = ((double) (end - start))/CLOCKS_PER_SEC;
-	printf("result %lf, result1 %lf, result2 %lf\n", result, result_1, result_2); //DEBUG
-	printf("Tempo com balanceamento de carga em segundos: %lf\n", execution_time);
-	printf("Erro no calculo com a soma: %lf\n", fabs(result_1 - result));
-	printf("Erro no calculo com a subtracao: %lf\n\n", fabs(result_2 - result));
-	dbg;
 
 	/*2. ONE GPU AND ONE CPU THREAD*/
 	_fcuda_ = NULL;
@@ -316,7 +234,7 @@ int main(int argc, char **argv) {
 	//Print time and error
 	execution_time = ((double) (end - start))/CLOCKS_PER_SEC;
 	printf("result %lf, result1 %lf, result2 %lf\n", result, result_1, result_2); //DEBUG
-	printf("Tempo na CPU com %d threads em segundos: %lf\n", num_cpus, gpuTime);
+	printf("Tempo na CPU com %d threads em segundos: %lf\n", num_cpus, gpuTime/1000000);
 	printf("Erro no calculo com a soma: %lf\n", fabs(result_1 - result));
 	printf("Erro no calculo com a subtracao: %lf\n\n", fabs(result_2 - result));
 
